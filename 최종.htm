@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>부분환불 계산기</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    h2 { color: #333; }
+    table { border-collapse: collapse; margin-top: 20px; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; }
+    input { width: 100px; padding: 5px; }
+    select { padding: 5px; }
+    button { margin-top: 20px; padding: 10px 20px; cursor: pointer; }
+    .result { margin-top: 30px; font-weight: bold; font-size: 18px; color: darkblue; }
+  </style>
+</head>
+<body>
+  <h2>부분환불 계산기</h2>
+
+  <label>총 쿠폰 사용 금액:
+    <input type="number" id="coupon" value="0">
+  </label>
+  <br>
+  <label>총 적립금 사용 금액:
+    <input type="number" id="points" value="0">
+  </label>
+  <br>
+  <label>환불 사유:
+    <select id="reason">
+      <option value="buyer">구매자 사유</option>
+      <option value="seller">판매자 사유</option>
+    </select>
+  </label>
+
+  <table id="productTable">
+    <thead>
+      <tr>
+        <th>상품명</th>
+        <th>상품가</th>
+        <th>환불 여부</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><input type="text" value="상품A"></td>
+        <td><input type="number" value="30000"></td>
+        <td><input type="checkbox"></td>
+      </tr>
+      <tr>
+        <td><input type="text" value="상품B"></td>
+        <td><input type="number" value="20000"></td>
+        <td><input type="checkbox"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <button onclick="addRow()">상품 추가</button>
+  <button onclick="calculateRefund()">환불액 계산</button>
+  <button onclick="resetCalculator()">초기화</button>
+
+  <div class="result" id="result"></div>
+
+  <script>
+    function addRow() {
+      const table = document.getElementById("productTable").getElementsByTagName("tbody")[0];
+      const row = table.insertRow();
+      row.innerHTML = `
+        <td><input type="text" value="상품명"></td>
+        <td><input type="number" value="0"></td>
+        <td><input type="checkbox"></td>
+      `;
+    }
+
+    function calculateRefund() {
+      const coupon = parseInt(document.getElementById('coupon').value) || 0;
+      const points = parseInt(document.getElementById('points').value) || 0;
+      const reason = document.getElementById('reason').value;
+
+      const rows = document.getElementById("productTable").getElementsByTagName("tbody")[0].rows;
+      let total = 0;
+      for (let row of rows) {
+        const price = parseInt(row.cells[1].querySelector("input").value) || 0;
+        total += price;
+      }
+
+      const FREE_LIMIT = 30000;
+      const SHIPPING = 3000;
+
+      let refundTotal = 0;
+      let refundDetails = "<strong>상품별 환불 내역:</strong><br>";
+      let keptTotal = 0;
+      let allRefunded = true;
+
+      for (let row of rows) {
+        const name = row.cells[0].querySelector("input").value;
+        const price = parseInt(row.cells[1].querySelector("input").value) || 0;
+        const checked = row.cells[2].querySelector("input").checked;
+
+        const ratio = price / total;
+        const couponAllocated = Math.floor(coupon * ratio);
+        const pointsAllocated = Math.floor(points * ratio);
+        const netPrice = price - couponAllocated - pointsAllocated;
+
+        if (checked) {
+          refundTotal += netPrice;
+          refundDetails += `${name} (상품가 ${price} - 쿠폰 ${couponAllocated} - 적립금 ${pointsAllocated}) → 환불액 ${netPrice}<br>`;
+        } else {
+          keptTotal += netPrice;
+          allRefunded = false;
+        }
+      }
+
+      refundDetails += `<br>상품별 환불 내역 총액: ${refundTotal.toLocaleString()}원<br>`;
+
+      let shippingDetails = "<br><strong>배송비 내역:</strong><br>";
+      let shippingDeduction = 0;
+
+      if (reason === "buyer") {
+        if (refundTotal > 0) {
+          shippingDeduction += SHIPPING;
+          shippingDetails += `반품배송비 차감: -${SHIPPING.toLocaleString()}원<br>`;
+        }
+
+        if (allRefunded) {
+          if (total >= FREE_LIMIT) {
+            shippingDeduction += SHIPPING;
+            shippingDetails += `초도배송비 차감: -${SHIPPING.toLocaleString()}원<br>`;
+          } else {
+            shippingDetails += `초도배송비: 이미 고객이 납부함 (추가 차감 없음)<br>`;
+          }
+        } else {
+          if (keptTotal < FREE_LIMIT) {
+            shippingDeduction += SHIPPING;
+            shippingDetails += `남은 금액 ${keptTotal.toLocaleString()}원 < ${FREE_LIMIT.toLocaleString()}원 → 초도배송비 차감: -${SHIPPING.toLocaleString()}원<br>`;
+          } else {
+            shippingDetails += `남은 금액 ${keptTotal.toLocaleString()}원 ≥ ${FREE_LIMIT.toLocaleString()}원 → 초도배송비 차감 없음<br>`;
+          }
+        }
+      } else {
+        shippingDetails += `판매자 사유: 배송비 차감 없음<br>`;
+      }
+
+      const finalRefund = refundTotal - shippingDeduction;
+
+      document.getElementById('result').innerHTML =
+        refundDetails + shippingDetails +
+        `<br><strong>최종 환불액: <span style="color:red">${finalRefund.toLocaleString()}원</span></strong>`;
+    }
+
+    function resetCalculator() {
+      // 쿠폰, 적립금 초기화
+      document.getElementById('coupon').value = 0;
+      document.getElementById('points').value = 0;
+      document.getElementById('reason').value = 'buyer';
+
+      // 테이블 초기화 (체크박스 해제, 상품명/가격 초기값 유지)
+      const rows = document.getElementById("productTable").getElementsByTagName("tbody")[0].rows;
+      for (let row of rows) {
+        row.cells[2].querySelector("input").checked = false;
+      }
+
+      // 결과 초기화
+      document.getElementById('result').innerHTML = '';
+    }
+  </script>
+</body>
+</html>
